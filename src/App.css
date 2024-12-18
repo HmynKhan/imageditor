@@ -1,0 +1,13 @@
+.StarRating{
+  align-items: center;
+  align-self: center;
+  text-align: center;
+}
+
+.active{
+  color:orangered
+}
+
+.inactive{
+  color: black;
+}

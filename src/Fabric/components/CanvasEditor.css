@@ -1,0 +1,40 @@
+.canvas-editor-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    margin-top: 50px;
+  }
+  
+  .toolbar {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  
+  .toolbar button {
+    padding: 10px 15px;
+    border: none;
+    background-color: #007bff;
+    color: white;
+    font-size: 14px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+  }
+  
+  .toolbar button:hover {
+    background-color: #0056b3;
+  }
+  
+  .canvas-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  #fabricCanvas {
+    border: 1px solid #ccc;
+    background-color: white;
+  }
+  
