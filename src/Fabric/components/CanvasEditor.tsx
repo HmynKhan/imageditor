@@ -38,6 +38,7 @@ const CanvasEditor: React.FC = () => {
     };
   }, []);
 
+  // Save canvas state for undo/redo
   const saveHistory = (canvasInstance: fabric.Canvas) => {
     setHistory((prev) => [...prev, JSON.stringify(canvasInstance)]);
     setRedoStack([]); // Clear redo stack on new action
@@ -74,7 +75,7 @@ const CanvasEditor: React.FC = () => {
       const brush = new fabric.PencilBrush(canvas);
       brush.color = "rgba(0, 0, 255, 0.5)";
       brush.width = brushSize;
-      brush.strokeDashArray = [5, 5];
+      brush.strokeDashArray = [5, 5]; // Dashed animation
       canvas.freeDrawingBrush = brush;
     }
   };
@@ -99,63 +100,11 @@ const CanvasEditor: React.FC = () => {
     }
   };
 
-  const addRectangle = () => {
-    if (canvas) {
-      const rect = new fabric.Rect({
-        left: 100,
-        top: 100,
-        fill: "red",
-        width: 100,
-        height: 60,
-        selectable: true,
-      });
-      canvas.add(rect);
-    }
-  };
-
-  const addTriangle = () => {
-    if (canvas) {
-      const triangle = new fabric.Triangle({
-        left: 150,
-        top: 150,
-        fill: "green",
-        width: 100,
-        height: 100,
-        selectable: true,
-      });
-      canvas.add(triangle);
-    }
-  };
-
-  const addSquare = () => {
-    if (canvas) {
-      const square = new fabric.Rect({
-        left: 200,
-        top: 200,
-        fill: "blue",
-        width: 100,
-        height: 100,
-        selectable: true,
-      });
-      canvas.add(square);
-    }
-  };
-
   const deleteSelectedObject = () => {
     if (canvas && selectedObject) {
       canvas.remove(selectedObject);
       setSelectedObject(null);
       saveHistory(canvas);
-    }
-  };
-
-  const downloadCanvas = () => {
-    if (canvas) {
-      const dataURL = canvas.toDataURL("image/png");
-      const link = document.createElement("a");
-      link.download = "canvas-image.png";
-      link.href = dataURL;
-      link.click();
     }
   };
 
@@ -193,13 +142,9 @@ const CanvasEditor: React.FC = () => {
         <button onClick={disableBrush}>Disable Brush</button>
         <button onClick={increaseBrushSize}>Increase Brush Size ({brushSize}px)</button>
         <button onClick={decreaseBrushSize}>Decrease Brush Size ({brushSize}px)</button>
-        <button onClick={addRectangle}>Add Rectangle</button>
-        <button onClick={addTriangle}>Add Triangle</button>
-        <button onClick={addSquare}>Add Square</button>
         <button onClick={undo}>Undo</button>
         <button onClick={redo}>Redo</button>
         <button onClick={saveMask}>Save Mask</button>
-        <button onClick={downloadCanvas}>Download Canvas</button>
         {selectedObject && (
           <button onClick={deleteSelectedObject}>Delete Selected</button>
         )}
