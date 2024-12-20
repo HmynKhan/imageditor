@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import * as fabric  from 'fabric';
+import * as fabric from 'fabric';
 
 interface FabricCanvas extends fabric.Canvas {
   freeDrawingBrush: fabric.PencilBrush;
@@ -11,62 +11,46 @@ const PaperEditor: React.FC = () => {
   const [brushSize, setBrushSize] = useState(5);
   const [history, setHistory] = useState<fabric.Object[]>([]);
   const [redoStack, setRedoStack] = useState<fabric.Object[]>([]);
-
   const [isDrawingMode, setIsDrawingMode] = useState(true);
-
+  const [selectionCount, setSelectionCount] = useState(0);
+  
+  console.log(history)
+  
   useEffect(() => {
     if (!canvasEl.current) return;
 
-    // Clean up existing canvas if it exists
     if (canvasRef.current) {
       canvasRef.current.dispose();
     }
 
-    // Initialize new canvas
     const canvas = new fabric.Canvas(canvasEl.current) as FabricCanvas;
-    canvas.setWidth(800);
-    canvas.setHeight(600);
-    canvas.backgroundColor = '#ddd';
+    canvas.setWidth(1707);
+    canvas.setHeight(650);
+    canvas.backgroundColor = 'gray';
     canvas.renderAll();
 
-    // Setup drawing mode
     canvas.isDrawingMode = true;
     const pencilBrush = new fabric.PencilBrush(canvas);
     pencilBrush.color = 'rgba(0, 0, 255, 0.5)';
     pencilBrush.width = brushSize;
     canvas.freeDrawingBrush = pencilBrush;
 
-    // Disable drawing when selecting objects
-    canvas.on('mouse:down', () => {
-      if (!canvas.isDrawingMode) {
-        canvas.selection = true;
-      }
-    });
-
-    // Track object additions for undo/redo
-    canvas.on('object:added', (event) => {
-      if (!canvas.isDrawingMode) return;
-      setHistory((prevHistory) => [...prevHistory, event.target as fabric.Object]);
-      setRedoStack([]);
-    });
-
-    // Setup selection styling
-    canvas.on('object:selected', (event) => {
-      const obj = event.target;
-      if (obj) {
-        obj.set({
-          borderColor: 'white',
-          cornerColor: 'white',
-          cornerStyle: 'circle',
-          borderDashArray: [5, 5],
-        });
+    canvas.on('path:created', (event) => {
+      const path = event.path;
+      if (path) {
+        mergePath(canvas, path);
+        addBorderEffect(canvas);
         canvas.renderAll();
+        setHistory((prevHistory) => [...prevHistory, path]);
+        setRedoStack([]);
+        updateSelectionCount(canvas);
       }
     });
+
+    canvas.on('object:modified', () => updateSelectionCount(canvas));
 
     canvasRef.current = canvas;
 
-    // Cleanup function
     return () => {
       if (canvasRef.current) {
         canvasRef.current.dispose();
@@ -75,25 +59,51 @@ const PaperEditor: React.FC = () => {
     };
   }, []);
 
-  // Update brush size without recreating canvas
   useEffect(() => {
     if (canvasRef.current?.freeDrawingBrush) {
       canvasRef.current.freeDrawingBrush.width = brushSize;
     }
   }, [brushSize]);
 
-  const handleBrushSizeChange = (size: number) => {
-    setBrushSize(size);
+  const mergePath = (canvas: fabric.Canvas, path: fabric.Path) => {
+    const existingPath = canvas.getObjects().find((obj) => obj.type === 'path') as fabric.Path;
+
+    if (existingPath) {
+      const combinedPathData = existingPath.path?.concat(path.path || []);
+      if (combinedPathData) {
+        const newPath = new fabric.Path(combinedPathData);
+        newPath.set({
+          fill: existingPath.fill,
+          stroke: existingPath.stroke,
+          left: Math.min(existingPath.left || 0, path.left || 0),
+          top: Math.min(existingPath.top || 0, path.top || 0),
+        });
+
+        canvas.remove(existingPath);
+        canvas.remove(path);
+        canvas.add(newPath);
+      }
+    } else {
+      canvas.add(path);
+    }
   };
 
-//   const handleToggleSelectionMode = () => {
-//     if (canvasRef.current) {
-//       canvasRef.current.isDrawingMode = !canvasRef.current.isDrawingMode;
-//       canvasRef.current.selection = !canvasRef.current.isDrawingMode;
-//     }
-//   };
+  const addBorderEffect = (canvas: fabric.Canvas) => {
+    canvas.getObjects().forEach((obj) => {
+      if (obj.type === 'path') {
+        obj.set({
+          stroke: 'white',
+          strokeDashArray: [5, 5],
+          strokeWidth: 2,
+        });
+      }
+    });
+    canvas.renderAll();
+  };
 
-const handleToggleSelectionMode = () => {
+  const handleBrushSizeChange = (size: number) => setBrushSize(size);
+
+  const handleToggleSelectionMode = () => {
     if (canvasRef.current) {
       const newMode = !isDrawingMode;
       canvasRef.current.isDrawingMode = newMode;
@@ -110,6 +120,7 @@ const handleToggleSelectionMode = () => {
         setRedoStack((prevRedo) => [lastObject, ...prevRedo]);
         canvasRef.current.remove(lastObject);
         canvasRef.current.renderAll();
+        updateSelectionCount(canvasRef.current);
       }
     }
   };
@@ -120,6 +131,7 @@ const handleToggleSelectionMode = () => {
       canvasRef.current.add(lastRedo);
       setRedoStack(restRedo);
       canvasRef.current.renderAll();
+      updateSelectionCount(canvasRef.current);
     }
   };
 
@@ -130,48 +142,59 @@ const handleToggleSelectionMode = () => {
         canvasRef.current.remove(activeObject);
         canvasRef.current.discardActiveObject();
         canvasRef.current.renderAll();
+        updateSelectionCount(canvasRef.current);
       }
     }
   };
 
   const handleSaveMask = () => {
     if (canvasRef.current) {
-      const dataURL = canvasRef.current.toDataURL({ format: 'png', quality: 1 });
+      const canvas = canvasRef.current;
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = canvas.getWidth();
+      maskCanvas.height = canvas.getHeight();
+      const maskCtx = maskCanvas.getContext('2d');
 
-      const link = document.createElement('a');
-      link.download = 'mask.png';
-      link.href = dataURL;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (maskCtx) {
+        canvas.renderAll();
+        const dataURL = canvas.toDataURL({ format: 'png', multiplier: 1 });
+        const image = new Image();
+        image.src = dataURL;
+        image.onload = () => {
+          maskCtx.fillStyle = 'black';
+          maskCtx.fillRect(0, 0, maskCanvas.width, maskCanvas.height);
+          maskCtx.globalCompositeOperation = 'source-atop';
+          maskCtx.drawImage(image, 0, 0);
+          const maskDataURL = maskCanvas.toDataURL('image/png');
+
+          const link = document.createElement('a');
+          link.download = 'mask.png';
+          link.href = maskDataURL;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        };
+      }
     }
+  };
+
+  const updateSelectionCount = (canvas: fabric.Canvas) => {
+    setSelectionCount(canvas.getObjects().length);
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '20px' }}>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button
-          onClick={handleUndo}
-          style={{ backgroundColor: 'blue', color: 'white', padding: '10px', borderRadius: '5px' }}
-        >
+        <button onClick={handleUndo} style={{ backgroundColor: 'blue', color: 'white', padding: '10px', borderRadius: '5px' }}>
           Undo
         </button>
-        <button
-          onClick={handleRedo}
-          style={{ backgroundColor: 'green', color: 'white', padding: '10px', borderRadius: '5px' }}
-        >
+        <button onClick={handleRedo} style={{ backgroundColor: 'green', color: 'white', padding: '10px', borderRadius: '5px' }}>
           Redo
         </button>
-        <button
-  onClick={handleToggleSelectionMode}
-  style={{ backgroundColor: 'orange', color: 'white', padding: '10px', borderRadius: '5px' }}
->
-  {isDrawingMode ? 'Enabled Draw' : 'Select Mode'}
-</button>
-        <button
-          onClick={handleDeleteSelected}
-          style={{ backgroundColor: 'red', color: 'white', padding: '10px', borderRadius: '5px' }}
-        >
+        <button onClick={handleToggleSelectionMode} style={{ backgroundColor: 'orange', color: 'white', padding: '10px', borderRadius: '5px' }}>
+          {isDrawingMode ? 'Draw Mode' : 'Select Mode'}
+        </button>
+        <button onClick={handleDeleteSelected} style={{ backgroundColor: 'red', color: 'white', padding: '10px', borderRadius: '5px' }}>
           Delete Selected
         </button>
         <input
@@ -181,14 +204,12 @@ const handleToggleSelectionMode = () => {
           value={brushSize}
           onChange={(e) => handleBrushSizeChange(Number(e.target.value))}
         />
-        <button
-          onClick={handleSaveMask}
-          style={{ backgroundColor: 'purple', color: 'white', padding: '10px', borderRadius: '5px' }}
-        >
+        <button onClick={handleSaveMask} style={{ backgroundColor: 'purple', color: 'white', padding: '10px', borderRadius: '5px' }}>
           Save Mask
         </button>
       </div>
-      <canvas ref={canvasEl} style={{ border: '1px solid black' }} />
+      <div>Selections: {selectionCount}</div>
+      <canvas ref={canvasEl} style={{ border: '1px solid gray' }} />
     </div>
   );
 };
